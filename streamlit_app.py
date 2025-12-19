@@ -1,5 +1,5 @@
-
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,182 +7,188 @@ from prophet import Prophet
 import sys
 import os
 
-# Ensure backend modules can be imported
+# ---------------- PATH SETUP ----------------
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
 from backend.agent import get_agent_response, finance_glossary
 from backend.sentiment import analyze_sentiment
 
-# Set Page Config
-st.set_page_config(page_title="MarketVision Pro", page_icon="📈", layout="wide")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="MarketVision Pro",
+    page_icon="📈",
+    layout="wide"
+)
 
-# Styling
-st.markdown("""
+# ---------------- HTML FRONTEND ----------------
+def render_html_ui():
+    html_code = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MarketVision Pro</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-    .stApp {
-        background-color: #0f172a;
-        color: #f8fafc;
-    }
-    .metric-card {
-        background-color: #1e293b;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.1);
-        text-align: center;
-    }
-    .metric-value {
-        font-size: 2em;
-        font-weight: bold;
-    }
-    .metric-label {
-        color: #94a3b8;
-        font-size: 0.9em;
-    }
+.glass {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.15);
+}
 </style>
-""", unsafe_allow_html=True)
+</head>
 
-# Application Logic
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-violet-900 text-slate-100">
+<div class="max-w-7xl mx-auto p-6">
+
+<header class="mb-6">
+  <h1 class="text-3xl font-bold">📈 MarketVision Pro</h1>
+  <p class="text-slate-300">Live watchlist + AI forecasting + Market Bot</p>
+</header>
+
+<section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="glass rounded-xl p-4">
+    <p class="text-sm text-slate-300">Watchlist</p>
+    <p class="text-xl font-bold mt-2">AAPL, MSFT, AMZN, GOOGL</p>
+  </div>
+
+  <div class="glass rounded-xl p-4">
+    <p class="text-sm text-slate-300">Forecast Engine</p>
+    <p class="mt-2 text-green-400 font-bold">Prophet + ML Ready</p>
+  </div>
+
+  <div class="glass rounded-xl p-4">
+    <p class="text-sm text-slate-300">AI Market Bot</p>
+    <p class="mt-2 text-indigo-400 font-bold">Agentic AI Enabled</p>
+  </div>
+</section>
+
+<section class="glass rounded-xl p-4">
+  <h2 class="text-lg font-semibold mb-2">Sample Market Trend</h2>
+  <canvas id="chart"></canvas>
+</section>
+
+</div>
+
+<script>
+const ctx = document.getElementById("chart");
+new Chart(ctx, {
+  type: "line",
+  data: {
+    labels: ["Mon","Tue","Wed","Thu","Fri"],
+    datasets: [{
+      label: "Demo Price",
+      data: [120,130,125,140,150],
+      borderColor: "#22d3ee",
+      tension: 0.4
+    }]
+  }
+});
+</script>
+
+</body>
+</html>
+"""
+    components.html(html_code, height=850, scrolling=True)
+
+# ---------------- STREAMLIT BACKEND ----------------
 def main():
-    st.title("📈 MarketVision Pro")
-    st.markdown("Live watchlist + Prophet predictions + AI Agent")
 
-    # Sidebar: Watchlist
-    st.sidebar.header("Watchlist")
-    default_tickers = ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA", "NVDA", "JPM", "META", "INTC", "KO"]
-    
-    selected_ticker = st.sidebar.selectbox("Select Ticker", default_tickers)
-    days_forecast = st.sidebar.slider("Forecast Days", 1, 30, 7)
+    # Render HTML UI
+    render_html_ui()
 
-    # --- Real-time Data ---
-    if selected_ticker:
-        try:
-            ticker = yf.Ticker(selected_ticker)
-            # Fetch 2d to calculate change
-            hist = ticker.history(period="2d", interval="1m")
-            
-            if not hist.empty and len(hist) >= 1:
-                latest = hist.iloc[-1]
-                price = latest["Close"]
-                
-                # Check for previous close
-                change = 0.0
-                pct = 0.0
-                if len(hist) >= 2:
-                    prev = hist.iloc[-2]["Close"]
-                    change = price - prev
-                    pct = (change / prev) * 100
-                
-                # Display Metrics
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.metric("Price", f"${price:,.2f}", f"{change:+.2f} ({pct:+.2f}%)")
-                with c2:
-                    st.metric("High", f"${latest['High']:,.2f}")
-                with c3:
-                    st.metric("Low", f"${latest['Low']:,.2f}")
-            else:
-                st.warning("No recent data found for this icon.")
-                
-            # History + Forecast
-            st.divider()
-            st.subheader(f"History & Forecast ({days_forecast} days)")
-            
-            with st.spinner("Fetching data & Training Prophet model..."):
-                df = yf.download(selected_ticker, period="1y", interval="1d")
-                
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = df.columns.get_level_values(0)
-                
-                df = df.reset_index()
-                df = df.rename(columns={"Date": "ds", "Close": "y"})
-                df["y"] = pd.to_numeric(df["y"], errors="coerce")
-                df = df.dropna(subset=["y"])
-
-                if len(df) > 30:
-                    m = Prophet(daily_seasonality=True)
-                    m.fit(df)
-                    future = m.make_future_dataframe(periods=days_forecast)
-                    forecast = m.predict(future)
-                    
-                    # Plotly Chart
-                    fig = go.Figure()
-                    
-                    # History
-                    fig.add_trace(go.Scatter(x=df['ds'], y=df['y'], name='History', line_color='#6366f1'))
-                    
-                    # Forecast
-                    future_df = forecast.tail(days_forecast)
-                    fig.add_trace(go.Scatter(x=future_df['ds'], y=future_df['yhat'], name='Forecast', line=dict(color='#22d3ee', dash='dash')))
-                    fig.add_trace(go.Scatter(x=future_df['ds'], y=future_df['yhat_upper'], name='Upper Band', line=dict(width=0), showlegend=False))
-                    fig.add_trace(go.Scatter(x=future_df['ds'], y=future_df['yhat_lower'], name='Lower Band', line=dict(width=0), fill='tonexty', fillcolor='rgba(34, 211, 238, 0.2)', showlegend=False))
-
-                    fig.update_layout(
-                        paper_bgcolor='rgba(0,0,0,0)', 
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color="white"),
-                        xaxis_gridcolor='rgba(255,255,255,0.1)',
-                        yaxis_gridcolor='rgba(255,255,255,0.1)'
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.error("Not enough data for prediction")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-    # --- Chatbot & Glossary ---
     st.divider()
-    col_chat, col_glossary = st.columns([2, 1])
+    st.subheader("📊 Live Market Analysis (Backend)")
 
-    with col_glossary:
-        st.subheader("📚 Financial Glossary")
-        term = st.text_input("Lookup term (e.g., EBITDA)")
-        if st.button("Search Glossary"):
-            res = finance_glossary.get(term.lower().strip())
-            if res:
-                st.success(res)
-            else:
-                st.error("Term not found.")
+    ticker = st.selectbox(
+        "Select Stock",
+        ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA", "NVDA"]
+    )
 
-    with col_chat:
-        st.subheader("🤖 Market Bot (with News)")
+    days = st.slider("Forecast Days", 1, 30, 7)
 
-        # Chat History
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
+    if ticker:
+        df = yf.download(ticker, period="1y", interval="1d")
+        df = df.reset_index()
+        df = df.rename(columns={"Date": "ds", "Close": "y"})
+        df["y"] = pd.to_numeric(df["y"], errors="coerce")
+        df = df.dropna()
 
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        if len(df) > 30:
+            model = Prophet(daily_seasonality=True)
+            model.fit(df)
 
-        # Input
-        if prompt := st.chat_input("Ask about market news..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            future = model.make_future_dataframe(periods=days)
+            forecast = model.predict(future)
 
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    # Get response from agent
-                    response_text = get_agent_response(prompt)
-                    
-                    # Get sentiment
-                    try:
-                        sentiment = analyze_sentiment(prompt)
-                        # Format sentiment if needed, or just append
-                        sentiment_label = sentiment.get("FinBERT Label", "Neutral")
-                        st.markdown(response_text)
-                        
-                        # Add sentiment text in small font
-                        st.caption(f"Sentiment Analysis: {sentiment_label}")
-                        
-                        st.session_state.messages.append({"role": "assistant", "content": response_text})
-                    except:
-                        st.markdown(response_text)
-                        st.session_state.messages.append({"role": "assistant", "content": response_text})
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df["ds"], y=df["y"],
+                name="History",
+                line=dict(color="#6366f1")
+            ))
 
+            future_df = forecast.tail(days)
+            fig.add_trace(go.Scatter(
+                x=future_df["ds"], y=future_df["yhat"],
+                name="Forecast",
+                line=dict(color="#22d3ee", dash="dash")
+            ))
+
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="white")
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ---------------- AI CHATBOT ----------------
+    st.divider()
+    st.subheader("🤖 Market Bot")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask about markets, stocks, or news"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                reply = get_agent_response(prompt)
+
+                try:
+                    sentiment = analyze_sentiment(prompt)
+                    label = sentiment.get("FinBERT Label", "Neutral")
+                    st.markdown(reply)
+                    st.caption(f"Sentiment: {label}")
+                except:
+                    st.markdown(reply)
+
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": reply}
+                )
+
+    # ---------------- GLOSSARY ----------------
+    st.divider()
+    st.subheader("📚 Financial Glossary")
+
+    term = st.text_input("Enter term (e.g., EBITDA)")
+    if st.button("Search"):
+        res = finance_glossary.get(term.lower().strip())
+        if res:
+            st.success(res)
+        else:
+            st.error("Term not found")
+
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     main()
-
-
-
