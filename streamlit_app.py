@@ -10,7 +10,7 @@ import os
 # Ensure backend modules can be imported
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
-from agent import get_agent_response, finance_glossary
+from backend.agent import get_agent_response, finance_glossary
 from sentiment import analyze_sentiment
 
 # Set Page Config
@@ -183,3 +183,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
