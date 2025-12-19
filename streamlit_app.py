@@ -11,7 +11,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
 from backend.agent import get_agent_response, finance_glossary
-from sentiment import analyze_sentiment
+from backend.sentiment import analyze_sentiment
 
 # Set Page Config
 st.set_page_config(page_title="MarketVision Pro", page_icon="📈", layout="wide")
@@ -183,4 +183,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
