@@ -108,7 +108,7 @@ def main():
                     fig = go.Figure()
                     
                     # History
-                    fig.add_trace(go.Scatter(x=df['ds'], y=df['y'], name='History', line__color='#6366f1'))
+                    fig.add_trace(go.Scatter(x=df['ds'], y=df['y'], name='History', line_color='#6366f1'))
                     
                     # Forecast
                     future_df = forecast.tail(days_forecast)
@@ -183,5 +183,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
